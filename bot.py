@@ -11,6 +11,8 @@ from discord.ext import commands
 from config import BotConfig
 from services.brains_service import BrainsService
 from utils.constants import GENERIC_ERRORS
+from utils.interaction_logger import InteractionLogger
+from events.message_handler import setup_message_handlers
 
 
 class VilloroBot(commands.Bot):
@@ -19,6 +21,8 @@ class VilloroBot(commands.Bot):
     def __init__(self):
         print("[DEBUG] ~~~~~~~~~~~~ Initializing VilloroBot... ~~~~~~~~~~~~")
         intents = discord.Intents.default()
+        intents.message_content = True  # Privileged — enable in Discord Developer Portal
+        intents.members = True          # Privileged — needed to resolve display names on reactions
         super().__init__(command_prefix='!', intents=intents)
 
         self.setup_logging()
@@ -32,7 +36,13 @@ class VilloroBot(commands.Bot):
             self.config.KEY_OPENAI
         )
 
+        self.interaction_logger = InteractionLogger()
+
+        # Tracks which message IDs have 👍/👎 reactions for feedback logging
+        self.feedback_messages: set = set()
+
         self.load_cogs()
+        setup_message_handlers(self)
 
     async def setup_hook(self):
         """Called when the bot is preparing to connect"""
