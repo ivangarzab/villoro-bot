@@ -22,7 +22,6 @@ class VilloroBot(commands.Bot):
         print("[DEBUG] ~~~~~~~~~~~~ Initializing VilloroBot... ~~~~~~~~~~~~")
         intents = discord.Intents.default()
         intents.message_content = True  # Privileged — enable in Discord Developer Portal
-        intents.members = True          # Privileged — needed to resolve display names on reactions
         super().__init__(command_prefix='!', intents=intents)
 
         self.setup_logging()
@@ -37,9 +36,6 @@ class VilloroBot(commands.Bot):
         )
 
         self.interaction_logger = InteractionLogger()
-
-        # Tracks which message IDs have 👍/👎 reactions for feedback logging
-        self.feedback_messages: set = set()
 
         self.load_cogs()
         setup_message_handlers(self)

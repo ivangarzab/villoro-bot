@@ -4,14 +4,15 @@ Message event handler — public (@mention) and DM interaction modes.
 Public mode:  student @mentions the bot in a server channel → response posted publicly.
 DM mode:      student messages the bot directly → response sent in the DM thread.
 
-Reaction feedback is applied sporadically (FEEDBACK_PERCENTAGE) to public and DM
-responses. Ephemeral (/ask-privately) responses do not support reactions.
+Button feedback (👍/👎) is attached directly to the response message sporadically
+(FEEDBACK_PERCENTAGE). Ephemeral (/ask-privately) responses do not get buttons.
 """
 import random
 import discord
 from kluvs_brain import BrainError, RetrievalError, ReasoningError
 
 from utils.constants import FEEDBACK_PERCENTAGE
+from utils.feedback import FeedbackView
 
 
 def setup_message_handlers(bot):
@@ -51,44 +52,14 @@ def setup_message_handlers(bot):
                 mode='public', guild_id=str(message.guild.id)
             )
 
-    @bot.event
-    async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
-        # Ignore the bot's own reactions
-        if payload.user_id == bot.user.id:
-            return
-
-        # Only track reactions on messages we flagged for feedback
-        if payload.message_id not in bot.feedback_messages:
-            return
-
-        emoji = str(payload.emoji)
-        if emoji not in ('👍', '👎'):
-            return
-
-        # Resolve display name
-        display_name = str(payload.user_id)
-        if payload.guild_id:
-            guild = bot.get_guild(payload.guild_id)
-            if guild:
-                member = guild.get_member(payload.user_id)
-                if member:
-                    display_name = member.display_name
-
-        bot.interaction_logger.log_reaction(
-            message_id=str(payload.message_id),
-            user_id=str(payload.user_id),
-            display_name=display_name,
-            reaction=emoji,
-        )
-        print(f"[INFO] Logged reaction {emoji} from {display_name} on message {payload.message_id}")
-
 
 async def _handle_ask(bot, message: discord.Message, question: str, mode: str, guild_id: str | None):
     """Shared ask logic for public and DM modes."""
     async with message.channel.typing():
         try:
             response = await bot.brains_service.ask(question)
-            sent = await message.channel.send(response)
+            view = FeedbackView(bot) if random.random() < FEEDBACK_PERCENTAGE else None
+            sent = await message.channel.send(response, view=view)
 
             bot.interaction_logger.log_interaction(
                 user_id=str(message.author.id),
@@ -100,13 +71,6 @@ async def _handle_ask(bot, message: discord.Message, question: str, mode: str, g
                 error_type='',
                 message_id=str(sent.id),
             )
-
-            # Sporadic reaction feedback (not on private/ephemeral)
-            if random.random() < FEEDBACK_PERCENTAGE:
-                await sent.add_reaction('👍')
-                await sent.add_reaction('👎')
-                bot.feedback_messages.add(sent.id)
-                print(f"[INFO] Added feedback reactions to message {sent.id}")
 
         except RetrievalError:
             response = (

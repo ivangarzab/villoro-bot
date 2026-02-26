@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 
 from events.message_handler import setup_message_handlers, _handle_ask
+from utils.feedback import FeedbackView
 
 
 class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
@@ -17,7 +18,6 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         self.bot.user.id = 999
         self.bot.brains_service = AsyncMock()
         self.bot.interaction_logger = MagicMock()
-        self.bot.feedback_messages = set()
 
         self.events = {}
 
@@ -139,6 +139,26 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
     # ------------------------------------------------------------------
     # on_message — error paths
     # ------------------------------------------------------------------
+
+    @patch('events.message_handler.random.random', return_value=0.0)  # always triggers
+    async def test_feedback_view_attached_when_triggered(self, _mock_random):
+        self.bot.brains_service.ask.return_value = "A hint"
+        message = self._make_guild_message(
+            f'<@{self.bot.user.id}> What is freedom?', mentions_bot=True
+        )
+        await self.events['on_message'](message)
+        _, send_kwargs = message.channel.send.call_args
+        self.assertIsInstance(send_kwargs.get('view'), FeedbackView)
+
+    @patch('events.message_handler.random.random', return_value=1.0)  # never triggers
+    async def test_no_feedback_view_when_not_triggered(self, _mock_random):
+        self.bot.brains_service.ask.return_value = "A hint"
+        message = self._make_guild_message(
+            f'<@{self.bot.user.id}> What is freedom?', mentions_bot=True
+        )
+        await self.events['on_message'](message)
+        _, send_kwargs = message.channel.send.call_args
+        self.assertIsNone(send_kwargs.get('view'))
 
     async def test_retrieval_error_logs_error_type(self):
         from kluvs_brain import RetrievalError
