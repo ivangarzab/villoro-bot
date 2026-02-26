@@ -12,11 +12,11 @@ class BotConfig:
         load_dotenv(override=True)
 
         self.ENV = os.getenv("ENV")
-        if self.ENV == "dev":
-            print("[DEBUG] ~~~~~~~~~~~~ Running in development mode ~~~~~~~~~~~~")
-            self.TOKEN = os.getenv("DEV_TOKEN")
-        else:
-            self.TOKEN = os.getenv("TOKEN")
+        # if self.ENV == "dev":
+        #     print("[DEBUG] ~~~~~~~~~~~~ Running in development mode ~~~~~~~~~~~~")
+        #     self.TOKEN = os.getenv("DEV_TOKEN")
+        # else:
+        self.TOKEN = os.getenv("TOKEN")
 
         # kluvs-brain credentials
         self.BRAINS_SUPABASE_URL = os.getenv("BRAINS_SUPABASE_URL")
