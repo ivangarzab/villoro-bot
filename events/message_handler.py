@@ -14,6 +14,8 @@ from kluvs_brain import BrainError, RetrievalError, ReasoningError
 from utils.constants import FEEDBACK_PERCENTAGE
 from utils.feedback import FeedbackView
 
+MAX_MSG_LEN = 1990
+
 
 def setup_message_handlers(bot):
 
@@ -55,73 +57,85 @@ def setup_message_handlers(bot):
 
 async def _handle_ask(bot, message: discord.Message, question: str, mode: str, guild_id: str | None):
     """Shared ask logic for public and DM modes."""
-    async with message.channel.typing():
-        try:
-            response = await bot.brains_service.ask(question)
-            view = FeedbackView(bot) if random.random() < FEEDBACK_PERCENTAGE else None
-            sent = await message.channel.send(response, view=view)
+    thinking_msg = await message.channel.send("Thinking...")
+    try:
+        response = await bot.brains_service.ask(message.author.id, question)
+        chunks = _split_response(response)
+        view = FeedbackView(bot) if random.random() < FEEDBACK_PERCENTAGE else None
+        await thinking_msg.edit(content=chunks[0], view=view)
+        for chunk in chunks[1:]:
+            await message.channel.send(chunk)
 
-            bot.interaction_logger.log_interaction(
-                user_id=str(message.author.id),
-                display_name=message.author.display_name,
-                guild_id=guild_id,
-                mode=mode,
-                question=question,
-                response=response,
-                error_type='',
-                message_id=str(sent.id),
-            )
+        bot.interaction_logger.log_interaction(
+            user_id=str(message.author.id),
+            display_name=message.author.display_name,
+            guild_id=guild_id,
+            mode=mode,
+            question=question,
+            response=response,
+            error_type='',
+            message_id=str(thinking_msg.id),
+        )
 
-        except RetrievalError:
-            response = (
-                "I couldn't find relevant information in the book for that question. "
-                "Try rephrasing or asking about a different aspect."
-            )
-            sent = await message.channel.send(response)
-            bot.interaction_logger.log_interaction(
-                user_id=str(message.author.id),
-                display_name=message.author.display_name,
-                guild_id=guild_id,
-                mode=mode,
-                question=question,
-                response=response,
-                error_type='RetrievalError',
-                message_id=str(sent.id),
-            )
+    except RetrievalError:
+        response = (
+            "I couldn't find relevant information in the book for that question. "
+            "Try rephrasing or asking about a different aspect."
+        )
+        await thinking_msg.edit(content=response)
+        bot.interaction_logger.log_interaction(
+            user_id=str(message.author.id),
+            display_name=message.author.display_name,
+            guild_id=guild_id,
+            mode=mode,
+            question=question,
+            response=response,
+            error_type='RetrievalError',
+            message_id=str(thinking_msg.id),
+        )
 
-        except ReasoningError:
-            response = (
-                "I had trouble generating a response. "
-                "This may be an OpenAI service issue — please try again in a moment."
-            )
-            sent = await message.channel.send(response)
-            bot.interaction_logger.log_interaction(
-                user_id=str(message.author.id),
-                display_name=message.author.display_name,
-                guild_id=guild_id,
-                mode=mode,
-                question=question,
-                response=response,
-                error_type='ReasoningError',
-                message_id=str(sent.id),
-            )
+    except ReasoningError:
+        response = (
+            "I had trouble generating a response. "
+            "This may be an OpenAI service issue — please try again in a moment."
+        )
+        await thinking_msg.edit(content=response)
+        bot.interaction_logger.log_interaction(
+            user_id=str(message.author.id),
+            display_name=message.author.display_name,
+            guild_id=guild_id,
+            mode=mode,
+            question=question,
+            response=response,
+            error_type='ReasoningError',
+            message_id=str(thinking_msg.id),
+        )
 
-        except BrainError:
-            response = "Something went wrong on my end. Please try again later."
-            sent = await message.channel.send(response)
-            bot.interaction_logger.log_interaction(
-                user_id=str(message.author.id),
-                display_name=message.author.display_name,
-                guild_id=guild_id,
-                mode=mode,
-                question=question,
-                response=response,
-                error_type='BrainError',
-                message_id=str(sent.id),
-            )
+    except BrainError:
+        response = "Something went wrong on my end. Please try again later."
+        await thinking_msg.edit(content=response)
+        bot.interaction_logger.log_interaction(
+            user_id=str(message.author.id),
+            display_name=message.author.display_name,
+            guild_id=guild_id,
+            mode=mode,
+            question=question,
+            response=response,
+            error_type='BrainError',
+            message_id=str(thinking_msg.id),
+        )
 
-        except Exception as e:
-            print(f"[ERROR] Unexpected error in message handler: {str(e)}")
-            await message.channel.send(
-                "An unexpected error occurred. Please try again later."
-            )
+    except Exception as e:
+        print(f"[ERROR] Unexpected error in message handler: {str(e)}")
+        await thinking_msg.edit(content="An unexpected error occurred. Please try again later.")
+
+
+def _split_response(text: str) -> list[str]:
+    """Split a response into chunks that fit Discord's message limit."""
+    if len(text) <= MAX_MSG_LEN:
+        return [text]
+    chunks = []
+    while text:
+        chunks.append(text[:MAX_MSG_LEN])
+        text = text[MAX_MSG_LEN:]
+    return chunks

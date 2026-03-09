@@ -41,13 +41,9 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         message.guild.id = 100
         message.mentions = [self.bot.user] if mentions_bot else []
 
-        sent = AsyncMock()
-        sent.id = 555
-        message.channel.send = AsyncMock(return_value=sent)
-        message.channel.typing = MagicMock(return_value=AsyncMock(
-            __aenter__=AsyncMock(return_value=None),
-            __aexit__=AsyncMock(return_value=None),
-        ))
+        thinking_msg = AsyncMock()
+        thinking_msg.id = 555
+        message.channel.send = AsyncMock(return_value=thinking_msg)
         return message
 
     def _make_dm_message(self, content):
@@ -61,13 +57,9 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
         message.guild = None
         message.mentions = []
 
-        sent = AsyncMock()
-        sent.id = 666
-        message.channel.send = AsyncMock(return_value=sent)
-        message.channel.typing = MagicMock(return_value=AsyncMock(
-            __aenter__=AsyncMock(return_value=None),
-            __aexit__=AsyncMock(return_value=None),
-        ))
+        thinking_msg = AsyncMock()
+        thinking_msg.id = 666
+        message.channel.send = AsyncMock(return_value=thinking_msg)
         return message
 
     # ------------------------------------------------------------------
@@ -147,8 +139,9 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
             f'<@{self.bot.user.id}> What is freedom?', mentions_bot=True
         )
         await self.events['on_message'](message)
-        _, send_kwargs = message.channel.send.call_args
-        self.assertIsInstance(send_kwargs.get('view'), FeedbackView)
+        thinking_msg = message.channel.send.return_value
+        _, edit_kwargs = thinking_msg.edit.call_args
+        self.assertIsInstance(edit_kwargs.get('view'), FeedbackView)
 
     @patch('events.message_handler.random.random', return_value=1.0)  # never triggers
     async def test_no_feedback_view_when_not_triggered(self, _mock_random):
@@ -157,8 +150,9 @@ class TestMessageHandler(unittest.IsolatedAsyncioTestCase):
             f'<@{self.bot.user.id}> What is freedom?', mentions_bot=True
         )
         await self.events['on_message'](message)
-        _, send_kwargs = message.channel.send.call_args
-        self.assertIsNone(send_kwargs.get('view'))
+        thinking_msg = message.channel.send.return_value
+        _, edit_kwargs = thinking_msg.edit.call_args
+        self.assertIsNone(edit_kwargs.get('view'))
 
     async def test_retrieval_error_logs_error_type(self):
         from kluvs_brain import RetrievalError

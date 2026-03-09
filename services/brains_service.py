@@ -1,23 +1,29 @@
 """
 Brains Service - AI intelligence layer powered by kluvs-brain
 
-Wraps the SocraticEngine from kluvs-brain to provide RAG-powered
-answers about "Knowledge and Freedom in the Work of Luis Villoro".
+Wraps KluvsAgenticEngine + SocraticAgent from kluvs-brain to provide
+RAG-powered answers about "Knowledge and Freedom in the Work of Luis Villoro".
+
+Maintains per-user conversation history for contextual Socratic dialogue.
 """
-from kluvs_brain import SocraticEngine, BrainError, RetrievalError, ReasoningError
+from typing import Dict, List
+
+from kluvs_brain import KluvsAgenticEngine, SocraticAgent, BrainError, RetrievalError, ReasoningError
 
 from utils.constants import BOOK_TITLE, BOOK_SCOPE
+
+MAX_HISTORY = 20  # messages (10 Q&A pairs)
 
 
 class BrainsService:
     """
-    AI service wrapper for kluvs-brain's SocraticEngine.
+    AI service wrapper for kluvs-brain's agentic RAG pipeline.
 
-    Provides a Discord-bot-friendly async interface to the RAG backend,
-    using Socratic tutoring methodology to guide students through the book.
+    Instantiates KluvsAgenticEngine + SocraticAgent once at startup and
+    maintains per-user conversation history for contextual Socratic dialogue.
 
     Attributes:
-        engine: The underlying SocraticEngine from kluvs-brain
+        agent: SocraticAgent wrapping the KluvsAgenticEngine
         book_title: The full title of the book being queried
         scope: Supabase scope identifier for vector search filtering
     """
@@ -37,18 +43,24 @@ class BrainsService:
         if not all([supabase_url, supabase_key, openai_key]):
             raise ValueError("All API credentials required for BrainsService")
 
-        print("[INFO] Initializing BrainsService with SocraticEngine")
-        self.engine = SocraticEngine(supabase_url, supabase_key, openai_key)
+        print("[INFO] Initializing BrainsService with KluvsAgenticEngine")
+        engine = KluvsAgenticEngine(supabase_url, supabase_key, openai_key)
+        self.agent = SocraticAgent(engine)
         self.book_title = BOOK_TITLE
         self.scope = BOOK_SCOPE
+        self._history: Dict[int, List[Dict[str, str]]] = {}
 
         print(f"[INFO] BrainsService initialized — scope: '{self.scope}', book: '{self.book_title}'")
 
-    async def ask(self, question: str) -> str:
+    async def ask(self, user_id: int, question: str) -> str:
         """
-        Ask a question about the book using RAG-powered Socratic tutoring.
+        Ask a question about the book using agentic RAG-powered Socratic tutoring.
+
+        Retrieves and updates per-user conversation history so the agent can
+        track student progress across turns.
 
         Args:
+            user_id: Discord user ID (int) used to key conversation history
             question: The student's question about the book
 
         Returns:
@@ -59,15 +71,19 @@ class BrainsService:
             ReasoningError: If the AI engine fails to generate a response
             BrainError: For other brain-related errors
         """
-        print(f"[INFO] Processing question — scope='{self.scope}'")
+        print(f"[INFO] Processing question — scope='{self.scope}', user={user_id}")
         print(f"[INFO] Question: {question}")
 
+        history = self._history.get(user_id, [])
+
         try:
-            response = await self.engine.ask(
+            response = await self.agent.ask(
                 student_query=question,
                 scope=self.scope,
-                book_title=self.book_title
+                book_title=self.book_title,
+                history=history,
             )
+            self._update_history(user_id, question, response)
             print(f"[SUCCESS] Response generated for '{self.book_title}'")
             return response
 
@@ -86,3 +102,10 @@ class BrainsService:
         except Exception as e:
             print(f"[ERROR] Unexpected error: {str(e)}")
             raise BrainError(f"Unexpected error: {str(e)}")
+
+    def _update_history(self, user_id: int, question: str, response: str):
+        history = self._history.setdefault(user_id, [])
+        history.append({"role": "user", "content": question})
+        history.append({"role": "assistant", "content": response})
+        if len(history) > MAX_HISTORY:
+            self._history[user_id] = history[-MAX_HISTORY:]
