@@ -82,6 +82,12 @@ class VilloroBot(commands.Bot):
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)
 
+        # Route kluvs_brain logs (engine iterations, relevance scores, etc.) to same handlers
+        kluvs_brain_logger = logging.getLogger('kluvs_brain')
+        kluvs_brain_logger.setLevel(logging.INFO)
+        kluvs_brain_logger.addHandler(file_handler)
+        kluvs_brain_logger.addHandler(console_handler)
+
         self.logger = logger
         self.logger.info("Logging system initialized")
 
