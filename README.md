@@ -1,6 +1,6 @@
 # VilloroBot
 
-A Discord bot that acts as an expert on *Knowledge and Freedom in the Work of Luis Villoro* by Professor Luis Villoro.
+A Discord bot that acts as an expert on *Knowledge and Freedom in the Work of Luis Villoro* by Professor Carlos Montemayor.
 
 ## What is this?
 
