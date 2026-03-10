@@ -4,4 +4,4 @@ openai
 coverage
 codecov
 
-kluvs-brain @ git+ssh://git@github.com/ivangarzab/kluvs-brain.git
+kluvs-brain @ git+https://ivangarzab:${GH_TOKEN}@github.com/ivangarzab/kluvs-brain.git
