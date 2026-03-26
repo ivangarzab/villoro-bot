@@ -59,8 +59,8 @@ async def _handle_ask(bot, message: discord.Message, question: str, mode: str, g
     """Shared ask logic for public and DM modes."""
     thinking_msg = await message.channel.send("Thinking...")
     try:
-        response = await bot.brains_service.ask(message.author.id, question)
-        chunks = _split_response(response)
+        result = await bot.brains_service.ask(message.author.id, message.channel.id, question)
+        chunks = _split_response(result.response)
         view = FeedbackView(bot) if random.random() < FEEDBACK_PERCENTAGE else None
         await thinking_msg.edit(content=chunks[0], view=view)
         for chunk in chunks[1:]:
@@ -72,9 +72,10 @@ async def _handle_ask(bot, message: discord.Message, question: str, mode: str, g
             guild_id=guild_id,
             mode=mode,
             question=question,
-            response=response,
+            response=result.response,
             error_type='',
             message_id=str(thinking_msg.id),
+            conversation_id=result.conversation_id,
         )
 
     except RetrievalError:
