@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import MagicMock, AsyncMock
 
 from cogs.brains_commands import setup_brains_commands
+from services.brains_service import AskResult
 
 
 class TestBrainsCommands(unittest.IsolatedAsyncioTestCase):
@@ -37,7 +38,7 @@ class TestBrainsCommands(unittest.IsolatedAsyncioTestCase):
         return interaction
 
     async def test_ask_privately_success(self):
-        self.bot.brains_service.ask.return_value = "A Socratic hint..."
+        self.bot.brains_service.ask.return_value = AskResult(response="A Socratic hint...", conversation_id=None)
         interaction = self._make_interaction()
 
         await self.commands['ask-privately'](interaction, question="What is freedom?")
@@ -46,7 +47,7 @@ class TestBrainsCommands(unittest.IsolatedAsyncioTestCase):
         interaction.followup.send.assert_called_once_with("A Socratic hint...", ephemeral=True)
 
     async def test_ask_privately_logs_private_mode(self):
-        self.bot.brains_service.ask.return_value = "A hint"
+        self.bot.brains_service.ask.return_value = AskResult(response="A hint", conversation_id=None)
         interaction = self._make_interaction()
 
         await self.commands['ask-privately'](interaction, question="What is freedom?")
@@ -54,6 +55,24 @@ class TestBrainsCommands(unittest.IsolatedAsyncioTestCase):
         self.bot.interaction_logger.log_interaction.assert_called_once()
         call_kwargs = self.bot.interaction_logger.log_interaction.call_args[1]
         self.assertEqual(call_kwargs['mode'], 'private')
+
+    async def test_ask_privately_logs_null_conversation_id(self):
+        self.bot.brains_service.ask.return_value = AskResult(response="A hint", conversation_id=None)
+        interaction = self._make_interaction()
+
+        await self.commands['ask-privately'](interaction, question="What is freedom?")
+
+        call_kwargs = self.bot.interaction_logger.log_interaction.call_args[1]
+        self.assertIsNone(call_kwargs['conversation_id'])
+
+    async def test_ask_privately_passes_none_channel_id(self):
+        self.bot.brains_service.ask.return_value = AskResult(response="A hint", conversation_id=None)
+        interaction = self._make_interaction()
+
+        await self.commands['ask-privately'](interaction, question="What is freedom?")
+
+        _, call_kwargs = self.bot.brains_service.ask.call_args
+        self.assertIsNone(call_kwargs.get('channel_id') or self.bot.brains_service.ask.call_args[0][1])
 
     async def test_ask_privately_no_guild(self):
         interaction = self._make_interaction(guild_id=None)
