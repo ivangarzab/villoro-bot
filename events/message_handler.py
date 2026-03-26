@@ -66,6 +66,15 @@ async def _handle_ask(bot, message: discord.Message, question: str, mode: str, g
         else None
     )
 
+    # Seed new thread sessions with the starter message as initial context
+    if isinstance(message.channel, discord.Thread) and not bot.brains_service.has_session(message.channel.id):
+        try:
+            starter = await message.channel.parent.fetch_message(message.channel.id)
+            role = 'assistant' if starter.author == bot.user else 'user'
+            bot.brains_service.seed_session(message.channel.id, starter.content, role)
+        except Exception:
+            pass  # Starter message unavailable — proceed without seeding
+
     try:
         result = await bot.brains_service.ask(message.author.id, channel_id, question)
         chunks = _split_response(result.response)

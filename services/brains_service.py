@@ -63,6 +63,28 @@ class BrainsService:
 
         print(f"[INFO] BrainsService initialized — scope: '{self.scope}', book: '{self.book_title}'")
 
+    def has_session(self, channel_id: int) -> bool:
+        """Return True if a conversation session already exists for this channel."""
+        return channel_id in self._conversation_ids
+
+    def seed_session(self, channel_id: int, content: str, role: str):
+        """
+        Seed a brand-new thread session with the starter message as initial context.
+
+        No-op if a session already exists for this channel. Should be called
+        before the first ask() in a thread so the agent understands what sparked
+        the conversation.
+
+        Args:
+            channel_id: The thread's channel ID
+            content: Text of the starter message
+            role: 'user' or 'assistant' depending on who sent the starter message
+        """
+        if self.has_session(channel_id):
+            return
+        self._history[channel_id] = [{"role": role, "content": content}]
+        self._conversation_ids[channel_id] = str(uuid.uuid4())
+
     def _get_session(self, channel_id: int):
         """Return (history, conversation_id) for a channel, creating one if needed."""
         if channel_id not in self._conversation_ids:
