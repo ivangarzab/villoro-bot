@@ -4,13 +4,13 @@ Brains Service - AI intelligence layer powered by kluvs-brain
 Wraps KluvsAgenticEngine + SocraticAgent from kluvs-brain to provide
 RAG-powered answers about "Knowledge and Freedom in the Work of Luis Villoro".
 
-Maintains per-channel conversation history for contextual Socratic dialogue.
-History is scoped to the channel so all students in a server channel share
-the same conversation thread (public Socratic discussion), while DM channels
-and threads remain naturally isolated.
+Conversation history is maintained only for DMs and threads (channel_id is
+passed). Public server channels pass channel_id=None — each question is
+answered fresh with no prior context, avoiding contamination between
+unrelated student questions in a shared channel.
 """
 import uuid
-from typing import Dict, List, NamedTuple
+from typing import Dict, List, NamedTuple, Optional
 
 from kluvs_brain import KluvsAgenticEngine, SocraticAgent, BrainError, RetrievalError, ReasoningError
 
@@ -21,7 +21,7 @@ MAX_HISTORY = 20  # messages (10 Q&A pairs)
 
 class AskResult(NamedTuple):
     response: str
-    conversation_id: str
+    conversation_id: Optional[str]
 
 
 class BrainsService:
@@ -70,21 +70,23 @@ class BrainsService:
             self._conversation_ids[channel_id] = str(uuid.uuid4())
         return self._history[channel_id], self._conversation_ids[channel_id]
 
-    async def ask(self, user_id: int, channel_id: int, question: str) -> AskResult:
+    async def ask(self, user_id: int, channel_id: Optional[int], question: str) -> AskResult:
         """
         Ask a question about the book using agentic RAG-powered Socratic tutoring.
 
-        Retrieves and updates per-channel conversation history so the agent can
-        track the discussion across turns. All students in the same channel share
-        the same history; DMs and threads are naturally isolated by their channel ID.
+        When channel_id is provided (DMs and threads), conversation history is
+        retrieved and updated so the agent can track the discussion across turns.
+        When channel_id is None (public server channels), each question is
+        answered fresh with no prior context.
 
         Args:
             user_id: Discord user ID (used for logging only)
-            channel_id: Discord channel ID used to scope conversation history
+            channel_id: Channel ID to scope history, or None for stateless mode
             question: The student's question about the book
 
         Returns:
             AskResult with the Socratic response and the active conversation_id
+            (conversation_id is None in stateless mode)
 
         Raises:
             RetrievalError: If no knowledge is found or database is unavailable
@@ -94,7 +96,10 @@ class BrainsService:
         print(f"[INFO] Processing question — scope='{self.scope}', user={user_id}, channel={channel_id}")
         print(f"[INFO] Question: {question}")
 
-        history, conversation_id = self._get_session(channel_id)
+        if channel_id is not None:
+            history, conversation_id = self._get_session(channel_id)
+        else:
+            history, conversation_id = [], None
 
         try:
             response = await self.agent.ask(
@@ -103,7 +108,8 @@ class BrainsService:
                 book_title=self.book_title,
                 history=history,
             )
-            self._update_history(channel_id, question, response)
+            if channel_id is not None:
+                self._update_history(channel_id, question, response)
             print(f"[SUCCESS] Response generated for '{self.book_title}'")
             return AskResult(response=response, conversation_id=conversation_id)
 

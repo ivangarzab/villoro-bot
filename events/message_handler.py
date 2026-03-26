@@ -58,8 +58,16 @@ def setup_message_handlers(bot):
 async def _handle_ask(bot, message: discord.Message, question: str, mode: str, guild_id: str | None):
     """Shared ask logic for public and DM modes."""
     thinking_msg = await message.channel.send("Thinking...")
+
+    # History is maintained for DMs and threads only; public channels are stateless
+    channel_id = (
+        message.channel.id
+        if isinstance(message.channel, (discord.DMChannel, discord.Thread))
+        else None
+    )
+
     try:
-        result = await bot.brains_service.ask(message.author.id, message.channel.id, question)
+        result = await bot.brains_service.ask(message.author.id, channel_id, question)
         chunks = _split_response(result.response)
         view = FeedbackView(bot) if random.random() < FEEDBACK_PERCENTAGE else None
         await thinking_msg.edit(content=chunks[0], view=view)

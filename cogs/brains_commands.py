@@ -45,7 +45,7 @@ def setup_brains_commands(bot):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            result = await bot.brains_service.ask(interaction.user.id, interaction.channel_id, question)
+            result = await bot.brains_service.ask(interaction.user.id, None, question)
             await interaction.followup.send(result.response, ephemeral=True)
 
             # Log the interaction (no message_id since ephemeral messages aren't retrievable)
