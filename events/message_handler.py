@@ -58,9 +58,26 @@ def setup_message_handlers(bot):
 async def _handle_ask(bot, message: discord.Message, question: str, mode: str, guild_id: str | None):
     """Shared ask logic for public and DM modes."""
     thinking_msg = await message.channel.send("Thinking...")
+
+    # History is maintained for DMs and threads only; public channels are stateless
+    channel_id = (
+        message.channel.id
+        if isinstance(message.channel, (discord.DMChannel, discord.Thread))
+        else None
+    )
+
+    # Seed new thread sessions with the starter message as initial context
+    if isinstance(message.channel, discord.Thread) and not bot.brains_service.has_session(message.channel.id):
+        try:
+            starter = await message.channel.parent.fetch_message(message.channel.id)
+            role = 'assistant' if starter.author == bot.user else 'user'
+            bot.brains_service.seed_session(message.channel.id, starter.content, role)
+        except Exception:
+            pass  # Starter message unavailable — proceed without seeding
+
     try:
-        response = await bot.brains_service.ask(message.author.id, question)
-        chunks = _split_response(response)
+        result = await bot.brains_service.ask(message.author.id, channel_id, question)
+        chunks = _split_response(result.response)
         view = FeedbackView(bot) if random.random() < FEEDBACK_PERCENTAGE else None
         await thinking_msg.edit(content=chunks[0], view=view)
         for chunk in chunks[1:]:
@@ -72,9 +89,10 @@ async def _handle_ask(bot, message: discord.Message, question: str, mode: str, g
             guild_id=guild_id,
             mode=mode,
             question=question,
-            response=response,
+            response=result.response,
             error_type='',
             message_id=str(thinking_msg.id),
+            conversation_id=result.conversation_id,
         )
 
     except RetrievalError:

@@ -45,8 +45,8 @@ def setup_brains_commands(bot):
         await interaction.response.defer(ephemeral=True)
 
         try:
-            response = await bot.brains_service.ask(interaction.user.id, question)
-            await interaction.followup.send(response, ephemeral=True)
+            result = await bot.brains_service.ask(interaction.user.id, None, question)
+            await interaction.followup.send(result.response, ephemeral=True)
 
             # Log the interaction (no message_id since ephemeral messages aren't retrievable)
             bot.interaction_logger.log_interaction(
@@ -55,9 +55,10 @@ def setup_brains_commands(bot):
                 guild_id=str(interaction.guild_id),
                 mode='private',
                 question=question,
-                response=response,
+                response=result.response,
                 error_type='',
                 message_id='',
+                conversation_id=result.conversation_id,
             )
             print(f"[SUCCESS] Sent /ask-privately response")
 
