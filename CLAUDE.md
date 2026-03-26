@@ -56,14 +56,28 @@ BrainsService
 
 - `KluvsAgenticEngine` + `SocraticAgent` are instantiated **once at startup** in `BrainsService.__init__()`.
 - **Never** create a new engine/agent per message — it's expensive.
-- `BrainsService.ask(user_id: int, question: str) -> str` is the only public entry point.
+- `BrainsService.ask(user_id: int, channel_id: Optional[int], question: str) -> AskResult` is the only public entry point.
 
-### Per-User History
+### Conversation History
 
-`BrainsService` maintains `_history: Dict[int, List[Dict[str, str]]]` keyed by Discord user ID.
-- History is passed to `agent.ask(..., history=history)` on every call.
+History is scoped to the **channel** (`channel_id`), not the user. The policy for whether history is used depends on the interaction mode:
+
+| Mode | `channel_id` passed | History behaviour |
+|------|---------------------|-------------------|
+| `public` (@mention) | `None` | Stateless — each question answered fresh |
+| `dm` | DM channel ID | Per-user (DM channel is naturally unique per user) |
+| `thread` (@mention) | Thread channel ID | Shared by all students in the thread |
+| `private` (`/ask-privately`) | `None` | Stateless (ephemeral, no shared context) |
+
+Additional rules:
+- History is passed to `agent.ask(..., history=history)` on every stateful call.
 - Updated (user + assistant turns appended) **only on success**, never on error.
 - Capped at 20 messages (10 Q&A pairs) via `MAX_HISTORY = 20`.
+- `ask()` returns `AskResult(response: str, conversation_id: Optional[str])`. `conversation_id` is `None` in stateless mode.
+
+### Thread Seeding
+
+When the first message arrives in a thread with no existing session, `message_handler` fetches the thread's starter message (thread ID == starter message ID in Discord) and seeds the session via `BrainsService.seed_session()`. The starter message is injected as the first history entry with role `'assistant'` or `'user'` depending on its author. If the fetch fails, the thread proceeds without seeding (silent no-op).
 
 ### Interaction Modes
 
@@ -71,6 +85,7 @@ BrainsService
 |------|---------|-----------------|
 | `public` | @mention in server channel | Yes (FEEDBACK_PERCENTAGE chance) |
 | `dm` | Direct message to bot | Yes |
+| `thread` | @mention inside a thread | Yes (FEEDBACK_PERCENTAGE chance) |
 | `private` | `/ask-privately` slash command | No (ephemeral) |
 
 ### "Thinking..." UX
@@ -88,8 +103,11 @@ For `private` mode, `defer(ephemeral=True)` handles the loading state.
 
 ### `services/brains_service.py`
 - **`BrainsService(supabase_url, supabase_key, openai_key)`** — init the engine stack
-- **`ask(user_id, question) -> str`** — main RAG call with history injection
-- **`_update_history(user_id, question, response)`** — appends turns, enforces cap
+- **`ask(user_id, channel_id, question) -> AskResult`** — main RAG call; `channel_id=None` for stateless mode
+- **`has_session(channel_id) -> bool`** — check if a conversation session exists for a channel
+- **`seed_session(channel_id, content, role)`** — inject a starter message as initial thread context
+- **`_get_session(channel_id)`** — return or create `(history, conversation_id)` for a channel
+- **`_update_history(channel_id, question, response)`** — appends turns, enforces cap
 
 ### `events/message_handler.py`
 - **`setup_message_handlers(bot)`** — registers `on_message` event
@@ -100,7 +118,8 @@ For `private` mode, `defer(ephemeral=True)` handles the loading state.
 - Logs every interaction to `logs/interactions_YYYY-MM-DD.csv`
 - Logs reactions to `logs/reactions_YYYY-MM-DD.csv`
 - Join key: `message_id`
-- `conversation_id` and `tokens_used` columns are null placeholders for future features
+- `conversation_id` is populated for DMs and threads; `None` for stateless modes (public, private)
+- `tokens_used` is a null placeholder for future kluvs-brain usage tracking
 
 ### `utils/constants.py`
 ```python

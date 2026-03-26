@@ -26,9 +26,15 @@ make run       # Start the bot
 
 | Command | Description |
 |---------|-------------|
-| `/ask <question>` | Ask the Villoro expert a question about the book |
+| `/ask-privately <question>` | Ask a question — only you see the answer (ephemeral) |
 | `/help` | Getting started guide |
 | `/usage` | List all available commands |
+| @mention `<question>` | Ask publicly in a server channel |
+| DM `<question>` | Ask privately via direct message |
+
+## Conversation context
+
+VilloroBot maintains conversation history in **DMs and threads**, so the bot remembers earlier turns and can build on them. In public server channels, each question is answered fresh — this prevents unrelated student questions from contaminating each other's context. Starting a thread from a bot response automatically seeds the thread with that message as initial context.
 
 ## Development
 
